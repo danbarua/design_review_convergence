@@ -57,6 +57,18 @@ function resolveMargin(str, Mbeat, Mmatch) {
 
 // Fixed, hand-verified formula per verb -- this is the ONLY place sign
 // logic lives, and it never varies per clause.
+//
+// MODELING CHOICE, not a corpus-derived fact: beats_by_at_least (>=margin)
+// and does_not_beat_by_at_least (<margin) are written here as strict
+// logical complements, so every real value of d_local resolves to exactly
+// one verdict with no boundary overlap. The corpus's own "Ties are Halt"
+// phrasing never actually pins down whether the tie is at d_local==0 or at
+// d_local==margin, and could be read either way -- see
+// transcripts/R1.md's A11 (02plus04 Stop says "under P_max" but the halt
+// fires on "exceeds P_max") for an unrelated instance of this same
+// under-specified-boundary pattern elsewhere in the corpus. This solver
+// simply picks a boundary convention to get a computable answer; it is not
+// asserting that the corpus text resolves the boundary this way.
 function fires(verb, dLocal, margin) {
   switch (verb) {
     case "beats_by_at_least": return dLocal >= margin;
