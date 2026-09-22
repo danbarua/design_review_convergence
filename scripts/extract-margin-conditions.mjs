@@ -1,19 +1,15 @@
 #!/usr/bin/env bun
-// Extracts every Halt/Meter/Stop clause in the corpus that compares two named
-// quantities against a margin symbol (M_beat, M_match, or a bare number), as
-// structured data -- NOT a judgment about whether any two clauses agree.
-// Extraction is find-and-tag (Haiku, no thinking): read a sentence, write
-// down which two things it compares and the exact inequality that makes its
-// Halt fire. It does not decide if two clauses conflict -- that is a
-// separate, deterministic, non-LLM step (check-margin-conditions.mjs).
-//
-// The one judgment call left to the LLM: `check_purpose`, a short phrase
-// naming WHAT specific check this clause is (same discipline as
-// extract-symbols.mjs's kind-phrase reuse rule -- identical purpose gets the
-// identical phrase, verbatim, every time). This is a narrow semantic-identity
-// question ("are these two sentences about the same named check"), not an
-// inequality-equivalence question. The solver only ever compares clauses
-// that share a check_purpose; it never trusts the LLM's arithmetic.
+// v2: removes sign/threshold arithmetic from the LLM entirely. v1 asked
+// Haiku to compute a signed threshold (e.g. "-M_beat") from a sentence's
+// direction of comparison -- across three separate runs on the SAME
+// flagship sentence, it got the sign wrong three different ways (dropped
+// the margin to 0, flipped the sign, and once even truncated the quote).
+// The one thing Haiku reliably CAN do is literal template matching: which
+// of a small fixed set of sentence shapes this is, and which noun phrase is
+// the grammatical subject vs object, copied exactly as written. So that's
+// all it's asked to do now. All sign derivation moves to
+// check-margin-conditions.mjs, as plain deterministic code, from a fixed
+// formula per verb -- never from the LLM's arithmetic.
 //
 // Usage: bun scripts/extract-margin-conditions.mjs <file> [file...]
 
@@ -50,24 +46,27 @@ const schema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["source", "quote", "check_purpose", "lhs", "rhs", "operator", "threshold"],
+        required: ["source", "quote", "check_purpose", "subject", "object", "verb", "margin_symbol"],
         properties: {
           source: { type: "string", description: "document filename this clause appears in" },
-          quote: { type: "string", description: "the exact verbatim sentence or clause, copied character for character from the text -- do not paraphrase" },
+          quote: {
+            type: "string",
+            description: "the exact verbatim sentence, copied character for character from the text, that contains the FULL operative comparison -- not just a trailing parenthetical or a fragment. If the operative clause and its clarifying parenthetical are one sentence, quote the whole sentence.",
+          },
           check_purpose: {
             type: "string",
-            description: "a short phrase naming WHAT this clause checks, e.g. 'free-conv-vs-frozen-bank margin', 'bank contribution to the composed module', 'wave contribution to the composed module', 'stem vs FIR competitor margin'. CRITICAL: if two clauses are restating the SAME named check (even in different words, different sections, or different documents), you MUST reuse the identical phrase for both, verbatim. A new phrase means this is a genuinely different check, not a paraphrase of one you've already tagged. Do not invent a new phrase just because the sentence looks different -- decide based on whether a human would call these 'the same check' or 'two different checks that happen to compare related things'.",
+            description: "a short phrase naming WHAT this clause checks. Reuse the IDENTICAL phrase, verbatim, for every clause restating the same named check (even across documents, even in different words). A new phrase means a genuinely different check, not a paraphrase.",
           },
-          lhs: { type: "string", description: "canonical short name for the quantity that must be LARGER for this clause's condition to hold, e.g. 'bank', 'conv', 'wave_readout', '(3)', '(2)'. Use the corpus's own row/parenthetical numbers or symbol names, kept short and consistent." },
-          rhs: { type: "string", description: "canonical short name for the other quantity being compared, same naming discipline as lhs" },
-          operator: {
+          subject: { type: "string", description: "the grammatical SUBJECT of the comparison verb, copied/canonicalized as a short name exactly as the sentence names it -- the thing doing the beating/matching. E.g. in 'the free conv beats the frozen bank by M_beat', subject='conv'. In 'the frozen bank does not beat the learned conv by M_beat', subject='bank'. Do NOT invert or normalize this to match some other clause's orientation -- always the literal grammatical subject of THIS sentence." },
+          object: { type: "string", description: "the grammatical OBJECT of the comparison verb -- the thing being beaten/matched against, exactly as this sentence names it. E.g. subject='conv' pairs with object='bank'; subject='bank' pairs with object='conv'. Always literal to this sentence, never inverted." },
+          verb: {
             type: "string",
-            enum: ["halts_when_lhs_minus_rhs_lt", "halts_when_lhs_minus_rhs_lte", "halts_when_lhs_minus_rhs_gt", "halts_when_lhs_minus_rhs_gte"],
-            description: "the exact condition, in terms of d = (lhs - rhs), under which THIS CLAUSE's Halt fires. E.g. 'Halt if the frozen bank does not beat the learned conv by M_beat', with lhs=bank, rhs=conv, means Halt fires when (bank - conv) < M_beat -> halts_when_lhs_minus_rhs_lt. E.g. 'Halt if the free conv beats the frozen bank by M_beat', with lhs=bank, rhs=conv (same lhs/rhs choice, for comparability), means Halt fires when conv beats bank, i.e. (bank - conv) < 0 in the sense that conv > bank by M_beat -> rewrite as (conv - bank) >= M_beat, i.e. (bank - conv) <= -M_beat, i.e. halts_when_lhs_minus_rhs_lte with threshold '-M_beat'. Think carefully about sign: always express the threshold relative to (lhs - rhs) exactly as defined, do not flip lhs/rhs between clauses of the same check_purpose without adjusting operator and threshold sign to match.",
+            enum: ["beats_by_at_least", "does_not_beat_by_at_least", "matches_or_beats_within"],
+            description: "which fixed template this sentence matches, literally: 'beats_by_at_least' = 'SUBJECT beats/exceeds OBJECT by MARGIN' (Halt fires when subject clears object by at least the margin). 'does_not_beat_by_at_least' = 'SUBJECT does not beat OBJECT by MARGIN' (Halt fires when subject FAILS to clear object by the margin). 'matches_or_beats_within' = 'SUBJECT matches or beats OBJECT within MARGIN' (Halt fires when subject is within the margin of object, i.e. object does not clearly beat subject by more than the margin -- this is the doctrine-5 'control matches or beats instrument' shape). Pick based on the sentence's own verb phrase, not on what you think the intended rule 'should' be.",
           },
-          threshold: {
+          margin_symbol: {
             type: "string",
-            description: "the threshold value/symbol on the right of the operator, as it appears relative to (lhs - rhs): typically 'M_beat', 'M_match', '0', '-M_beat', '-M_match', or a bare number if stated numerically. Must be consistent with the sign convention used in `operator`.",
+            description: "the margin quantity named in the sentence, ALWAYS as a bare positive symbol or number -- 'M_beat', 'M_match', or a literal number. NEVER include a minus sign or any arithmetic here; the verb field already encodes the direction. If you find yourself wanting to write a negative sign, you have the wrong verb -- re-read the sentence and pick the verb template that matches without needing a sign.",
           },
         },
       },
@@ -78,9 +77,15 @@ const schema = {
 const response = await anthropic.messages.create({
   model,
   max_tokens: 16000,
-  system: `You extract Halt/Meter/Stop margin clauses from design documents as structured data. Every clause you extract compares two named quantities and states when a Halt fires, in terms of a margin threshold (M_beat, M_match, or a bare number).
+  system: `You extract Halt/Meter/Stop margin clauses from design documents as structured data, using three fixed sentence templates. This is template matching, not arithmetic -- you never compute a sign or a threshold value, you only decide which of three verbs a sentence's own grammar matches, and copy its subject/object exactly as written.
 
-Do not judge whether any two clauses agree or conflict -- that is a separate, deterministic step done after extraction. Your only two jobs: (1) get the sign and operator exactly right by reading the sentence literally, and (2) tag check_purpose so that two clauses restating the SAME named check get the IDENTICAL phrase, verbatim, and two clauses about genuinely different checks get different phrases. Getting (2) right is the single most important thing you do: under-merging (giving the same check two different phrases) hides a real contradiction from the downstream checker; over-merging (giving two different checks the same phrase) manufactures a fake one. When in doubt, ask: if I described what real-world scenario makes this Halt fire, is it the same scenario as this other clause, or a different one?`,
+Two examples from the same real document, same two quantities, opposite verbs -- notice subject/object are literal to each sentence, never inverted to align with each other:
+
+"Halt if the free conv beats the frozen bank by M_beat" -> subject='conv', object='bank', verb='beats_by_at_least', margin_symbol='M_beat'.
+
+"Halt: the frozen bank does not beat the learned first conv by M_beat" -> subject='bank', object='conv', verb='does_not_beat_by_at_least', margin_symbol='M_beat'.
+
+Notice these two are about the same two quantities but each keeps ITS OWN sentence's literal subject/object -- you are not asked to reconcile them into one orientation, that happens later by other code. Your only two jobs: (1) match the correct one of the three verb templates to what the sentence literally says, and (2) tag check_purpose so clauses restating the SAME named check get the IDENTICAL phrase. Getting check_purpose wrong (splitting one check into two phrases, or merging two different checks into one phrase) is the most consequential mistake -- when in doubt, ask whether a human would call these 'the same check' or 'two different checks that happen to compare related things'.`,
   messages: [{ role: "user", content: `Extract every Halt/Meter/Stop margin clause (any clause mentioning M_beat and/or M_match, or comparing two named quantities by a stated margin) from these documents:\n\n${corpus}` }],
   output_config: { format: { type: "json_schema", schema } },
 });
@@ -92,8 +97,18 @@ if (!raw) {
 }
 const parsed = JSON.parse(raw);
 
+// Hard mechanical check, no LLM: margin_symbol must never carry a sign. If
+// it does, extraction ignored the instruction and the sign bug is back --
+// fail loudly instead of feeding a silently-wrong value to the solver.
+const badSign = parsed.clauses.filter((c) => c.margin_symbol.trim().startsWith("-"));
+if (badSign.length > 0) {
+  log(`ERROR: ${badSign.length} clause(s) have a signed margin_symbol, which this schema forbids:`);
+  for (const c of badSign) log(`  [${c.source}] "${c.quote}" -> margin_symbol="${c.margin_symbol}"`);
+  process.exit(1);
+}
+
 const savedPath = `margin-conditions/${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
 await mkdir("margin-conditions", { recursive: true });
 await writeFile(savedPath, JSON.stringify(parsed, null, 2), "utf8");
-log(`saved ${parsed.clauses.length} clause(s) to ${savedPath}`);
+log(`saved ${parsed.clauses.length} clause(s) to ${savedPath}, all margin_symbol signs verified positive`);
 log(`usage ${JSON.stringify(response.usage)}, stop_reason ${response.stop_reason}`);

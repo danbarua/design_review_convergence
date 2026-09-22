@@ -1,21 +1,25 @@
 #!/usr/bin/env bun
-// Deterministic checker. Zero LLM calls. Takes margin-conditions/<ts>.json
-// (extract-margin-conditions.mjs's output) and decides, by exact case
-// analysis over real-valued d = (lhs - rhs), whether any two clauses sharing
-// a check_purpose can produce different Halt/no-Halt verdicts for the same
-// scenario, given the corpus's own constraint M_beat >= M_match >= 0.
+// Deterministic checker, v2. Zero LLM calls, and now zero LLM-derived signs:
+// v1 asked the LLM to output a signed threshold directly; that was the
+// single most unreliable step in the whole pipeline (three different wrong
+// answers across three runs on the same sentence). v2's extraction only
+// names a literal subject/object per sentence and picks one of three fixed
+// verb templates -- the sign for each verb is a fixed formula, written once
+// here, applied the same way every time.
 //
-// Every threshold in this corpus is one of a small closed set of atoms:
-// {0, M_beat, M_match, -M_beat, -M_match, or a bare number}. That means the
-// "fires" boolean is a single half-line boundary at that atom's value, for
-// ANY fixed (M_beat, M_match). Two such half-lines are identical functions
-// of d, for ALL valid (M_beat, M_match) with M_beat >= M_match >= 0, iff
-// they agree at every sample drawn from two configurations (strict
-// M_beat > M_match > 0, and the boundary M_beat = M_match) and at enough
-// breakpoints to cover every region a half-line boundary could land in.
-// This is exact for this predicate family, not a heuristic -- there is no
-// richer function shape a single atomic threshold comparison could produce
-// that these samples would miss.
+// Fixed verb formulas (d_local = subject - object, as literally written in
+// that clause's own sentence):
+//   beats_by_at_least:          Halt fires when d_local >= margin
+//   does_not_beat_by_at_least:  Halt fires when d_local <  margin
+//   matches_or_beats_within:    Halt fires when d_local >= -margin
+//
+// Two clauses sharing a check_purpose may name subject/object in either
+// order (e.g. one clause's subject is the other's object) -- that's still
+// resolved the same way as v1: canonical orientation from the first clause
+// in the group, sign flip for clauses using the reversed pair, then exact
+// case analysis over real-valued d, sampling every breakpoint plus a
+// midpoint between every adjacent pair (exact for this predicate family:
+// every threshold is one of {0, M_beat, M_match}, always positive now).
 //
 // Usage: bun scripts/check-margin-conditions.mjs [margin-conditions/<ts>.json]
 
@@ -28,7 +32,7 @@ function log(msg) {
 
 let path = process.argv[2];
 if (!path) {
-  const files = (await readdir("margin-conditions")).filter((f) => f.endsWith(".json")).sort();
+  const files = (await readdir("margin-conditions")).filter((f) => f.endsWith(".json") && !f.startsWith("hand-verified")).sort();
   if (files.length === 0) {
     console.error("no margin-conditions/*.json found -- run extract-margin-conditions.mjs first");
     process.exit(1);
@@ -40,50 +44,33 @@ if (!path) {
 const { clauses } = JSON.parse(await readFile(path, "utf8"));
 log(`loaded ${clauses.length} clause(s)`);
 
-function resolveThreshold(str, Mbeat, Mmatch) {
+function resolveMargin(str, Mbeat, Mmatch) {
   const s = str.trim();
-  const neg = s.startsWith("-");
-  const body = neg ? s.slice(1).trim() : s;
-  let val;
-  if (body === "M_beat") val = Mbeat;
-  else if (body === "M_match") val = Mmatch;
-  else {
-    const n = Number(body);
-    if (Number.isNaN(n)) throw new Error(`unrecognized threshold atom: "${str}"`);
-    val = n;
-  }
-  return neg ? -val : val;
+  if (s.startsWith("-")) throw new Error(`margin_symbol must be positive, got "${str}"`);
+  if (s === "M_beat") return Mbeat;
+  if (s === "M_match") return Mmatch;
+  const n = Number(s);
+  if (Number.isNaN(n)) throw new Error(`unrecognized margin atom: "${str}"`);
+  if (n < 0) throw new Error(`margin_symbol must be positive, got "${str}"`);
+  return n;
 }
 
-function fires(clause, d, Mbeat, Mmatch) {
-  const t = resolveThreshold(clause.threshold, Mbeat, Mmatch);
-  switch (clause.operator) {
-    case "halts_when_lhs_minus_rhs_lt": return d < t;
-    case "halts_when_lhs_minus_rhs_lte": return d <= t;
-    case "halts_when_lhs_minus_rhs_gt": return d > t;
-    case "halts_when_lhs_minus_rhs_gte": return d >= t;
-    default: throw new Error(`unrecognized operator: ${clause.operator}`);
+// Fixed, hand-verified formula per verb -- this is the ONLY place sign
+// logic lives, and it never varies per clause.
+function fires(verb, dLocal, margin) {
+  switch (verb) {
+    case "beats_by_at_least": return dLocal >= margin;
+    case "does_not_beat_by_at_least": return dLocal < margin;
+    case "matches_or_beats_within": return dLocal >= -margin;
+    default: throw new Error(`unrecognized verb: ${verb}`);
   }
 }
 
-// Two M-configurations exhaust the constraint M_beat >= M_match >= 0: the
-// generic strict case, and the boundary where they coincide.
 const M_CONFIGS = [
   { Mbeat: 10, Mmatch: 4 },
   { Mbeat: 6, Mmatch: 6 },
 ];
 
-// Exact case analysis requires a sample point in the interior of EVERY
-// region the merged breakpoint set could carve out -- not just the
-// interior of the two fixed symbolic breakpoints (M_match, M_beat). Two
-// arbitrary thresholds (e.g. two different clauses' own resolved values)
-// can disagree in the open interval between them even when neither is
-// M_match or M_beat, or when they coincide but the comparators point in
-// opposite directions. So: collect every breakpoint (fixed set + both
-// clauses' own thresholds), sort, then insert a midpoint between every
-// adjacent pair, plus one point below the minimum and one above the
-// maximum. That is exact for a finite union of half-line boundaries,
-// regardless of how many distinct threshold values are involved.
 function sampleBreakpoints(Mbeat, Mmatch, extraThresholds) {
   const raw = [...new Set([0, Mmatch, Mbeat, ...extraThresholds])].sort((a, b) => a - b);
   const points = [raw[0] - 1];
@@ -97,7 +84,6 @@ function sampleBreakpoints(Mbeat, Mmatch, extraThresholds) {
 
 const norm = (s) => s.trim().toLowerCase();
 
-// Group by check_purpose.
 const byPurpose = new Map();
 for (const c of clauses) {
   if (!byPurpose.has(c.check_purpose)) byPurpose.set(c.check_purpose, []);
@@ -111,24 +97,22 @@ const clean = [];
 for (const [purpose, group] of byPurpose) {
   if (group.length < 2) continue;
 
-  // Canonical orientation: the first clause's (lhs, rhs).
   const [ref, ...rest] = group;
   const oriented = [{ clause: ref, sign: 1 }];
   let ok = true;
   for (const c of rest) {
-    if (norm(c.lhs) === norm(ref.lhs) && norm(c.rhs) === norm(ref.rhs)) {
+    if (norm(c.subject) === norm(ref.subject) && norm(c.object) === norm(ref.object)) {
       oriented.push({ clause: c, sign: 1 });
-    } else if (norm(c.lhs) === norm(ref.rhs) && norm(c.rhs) === norm(ref.lhs)) {
-      oriented.push({ clause: c, sign: -1 }); // swapped orientation: d_this = -diff
+    } else if (norm(c.subject) === norm(ref.object) && norm(c.object) === norm(ref.subject)) {
+      oriented.push({ clause: c, sign: -1 });
     } else {
       ok = false;
-      unresolvable.push({ purpose, reason: `"${c.lhs}"/"${c.rhs}" doesn't match reference pair "${ref.lhs}"/"${ref.rhs}"`, clauses: group });
+      unresolvable.push({ purpose, reason: `"${c.subject}"/"${c.object}" doesn't match reference pair "${ref.subject}"/"${ref.object}"` });
       break;
     }
   }
   if (!ok) continue;
 
-  // Pairwise compare every clause in the oriented group against every other.
   let purposeClean = true;
   for (let i = 0; i < oriented.length; i++) {
     for (let j = i + 1; j < oriented.length; j++) {
@@ -136,20 +120,19 @@ for (const [purpose, group] of byPurpose) {
       let mismatch = null;
       let parseFailed = null;
       for (const { Mbeat, Mmatch } of M_CONFIGS) {
-        let tA, tB;
+        let mA, mB;
         try {
-          tA = resolveThreshold(A.clause.threshold, Mbeat, Mmatch);
-          tB = resolveThreshold(B.clause.threshold, Mbeat, Mmatch);
+          mA = resolveMargin(A.clause.margin_symbol, Mbeat, Mmatch);
+          mB = resolveMargin(B.clause.margin_symbol, Mbeat, Mmatch);
         } catch (err) {
           parseFailed = err.message;
           break;
         }
-        for (const diff of sampleBreakpoints(Mbeat, Mmatch, [tA, tB])) {
-          // diff is expressed in the canonical (ref.lhs - ref.rhs) frame.
-          const dA = A.sign * diff;
+        for (const diff of sampleBreakpoints(Mbeat, Mmatch, [mA, mB])) {
+          const dA = A.sign * diff; // subject-object in A's own sentence frame
           const dB = B.sign * diff;
-          const fA = fires(A.clause, dA, Mbeat, Mmatch);
-          const fB = fires(B.clause, dB, Mbeat, Mmatch);
+          const fA = fires(A.clause.verb, dA, mA);
+          const fB = fires(B.clause.verb, dB, mB);
           if (fA !== fB) {
             mismatch = { Mbeat, Mmatch, diff, fA, fB };
             break;
@@ -159,15 +142,15 @@ for (const [purpose, group] of byPurpose) {
       }
       if (parseFailed) {
         purposeClean = false;
-        unresolvable.push({ purpose, reason: `threshold parse error comparing ${A.clause.source} vs ${B.clause.source}: ${parseFailed}` });
+        unresolvable.push({ purpose, reason: `margin parse error comparing ${A.clause.source} vs ${B.clause.source}: ${parseFailed}` });
         continue;
       }
       if (mismatch) {
         purposeClean = false;
         contradictions.push({
           purpose,
-          clauseA: { source: A.clause.source, quote: A.clause.quote },
-          clauseB: { source: B.clause.source, quote: B.clause.quote },
+          clauseA: { source: A.clause.source, quote: A.clause.quote, subject: A.clause.subject, object: A.clause.object, verb: A.clause.verb, margin: A.clause.margin_symbol },
+          clauseB: { source: B.clause.source, quote: B.clause.quote, subject: B.clause.subject, object: B.clause.object, verb: B.clause.verb, margin: B.clause.margin_symbol },
           witness: mismatch,
         });
       }
@@ -185,18 +168,16 @@ if (contradictions.length > 0) {
   for (const c of contradictions) {
     log("");
     log(`check_purpose: "${c.purpose}"`);
-    log(`  A [${c.clauseA.source}]: ${c.clauseA.quote}`);
-    log(`  B [${c.clauseB.source}]: ${c.clauseB.quote}`);
+    log(`  A [${c.clauseA.source}]: (${c.clauseA.subject} ${c.clauseA.verb} ${c.clauseA.object} by ${c.clauseA.margin}) -- "${c.clauseA.quote}"`);
+    log(`  B [${c.clauseB.source}]: (${c.clauseB.subject} ${c.clauseB.verb} ${c.clauseB.object} by ${c.clauseB.margin}) -- "${c.clauseB.quote}"`);
     log(`  witness: with M_beat=${c.witness.Mbeat}, M_match=${c.witness.Mmatch}, diff=${c.witness.diff} -> A says Halt=${c.witness.fA}, B says Halt=${c.witness.fB}`);
   }
 }
 
 if (unresolvable.length > 0) {
   log("");
-  log("=== UNRESOLVABLE (naming mismatch, needs manual review, not auto-checked) ===");
-  for (const u of unresolvable) {
-    log(`  "${u.purpose}": ${u.reason}`);
-  }
+  log("=== UNRESOLVABLE (naming mismatch or parse error, needs manual review) ===");
+  for (const u of unresolvable) log(`  "${u.purpose}": ${u.reason}`);
 }
 
 log("");

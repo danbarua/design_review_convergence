@@ -1,0 +1,94 @@
+{
+  "clauses": [
+    {
+      "source": "DESIGN.md",
+      "quote": "Readout-does-the-job is a halt: the control **matches or beats** the instrument (the instrument fails to beat the control by more than \\(M_{\\mathrm{match}}\\)). Dynamics must change the meter.",
+      "check_purpose": "control matches or beats instrument",
+      "subject": "control",
+      "object": "instrument",
+      "verb": "matches_or_beats_within",
+      "margin_symbol": "M_match"
+    },
+    {
+      "source": "DESIGN.md",
+      "quote": "Stop requires beating every named comparator by \\(M_{\\mathrm{beat}}}\\). Ties are Halt, not Stop — Stop requires beating every named comparator by \\(M_{\\mathrm{beat}}}\\).",
+      "check_purpose": "instrument beats comparator",
+      "subject": "instrument",
+      "object": "comparator",
+      "verb": "beats_by_at_least",
+      "margin_symbol": "M_beat"
+    },
+    {
+      "source": "instruments/02_filterbank.md",
+      "quote": "Halt if the free conv beats the frozen bank by \\(M_{\\mathrm{beat}}}\\).",
+      "check_purpose": "bank beats learned conv",
+      "subject": "bank",
+      "object": "conv",
+      "verb": "does_not_beat_by_at_least",
+      "margin_symbol": "M_beat"
+    },
+    {
+      "source": "instruments/02_filterbank.md",
+      "quote": "Halt (doctrine 5): a linear map with \\(P_{\\mathrm{max}}\\) of the mix (if a mix exists) or \\(P_{\\mathrm{max}}^{\\mathrm{ctrl}}\\) (if no scar) **on raw patches** matches or beats the bank within \\(M_{\\mathrm{match}}}\\).",
+      "check_purpose": "control matches or beats bank",
+      "subject": "control",
+      "object": "bank",
+      "verb": "matches_or_beats_within",
+      "margin_symbol": "M_match"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "\\(3\\) must beat \\(1\\), \\(2\\) and \\(4\\) by \\(M_{\\mathrm{beat}}}\\).",
+      "check_purpose": "module beats control configurations",
+      "subject": "configuration_3",
+      "object": "configurations_1_2_4",
+      "verb": "beats_by_at_least",
+      "margin_symbol": "M_beat"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "If \\(2\\) matches \\(3\\) within \\(M_{\\mathrm{match}}}\\), bank is not contributing — **halt**.",
+      "check_purpose": "bank contributes to module",
+      "subject": "configuration_2",
+      "object": "configuration_3",
+      "verb": "does_not_beat_by_at_least",
+      "margin_symbol": "M_match"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "If \\(4\\) matches \\(3\\) within \\(M_{\\mathrm{match}}}\\), the wave is decoration — **halt**.",
+      "check_purpose": "wave contributes to module",
+      "subject": "configuration_4",
+      "object": "configuration_3",
+      "verb": "does_not_beat_by_at_least",
+      "margin_symbol": "M_match"
+    },
+    {
+      "source": "instruments/04_wave_bind.md",
+      "quote": "Halt: wave+readout does not beat the control by \\(M_{\\mathrm{beat}}}\\) on ARI.",
+      "check_purpose": "wave beats control",
+      "subject": "wave",
+      "object": "control",
+      "verb": "does_not_beat_by_at_least",
+      "margin_symbol": "M_beat"
+    },
+    {
+      "source": "instruments/05_hippo_temporal.md",
+      "quote": "Halt: frozen-\\(A\\)+\\(C\\) does not beat the \\(N\\)-tap FIR by \\(M_{\\mathrm{beat}}}\\) on the lag curve.",
+      "check_purpose": "frozen stem beats FIR control",
+      "subject": "stem",
+      "object": "FIR",
+      "verb": "does_not_beat_by_at_least",
+      "margin_symbol": "M_beat"
+    },
+    {
+      "source": "instruments/05_hippo_temporal.md",
+      "quote": "Halt: frozen-\\(A\\)+\\(C\\) does not beat learned-\\(A\\) by \\(M_{\\mathrm{beat}}}\\) on the lag curve.",
+      "check_purpose": "frozen A beats learned A",
+      "subject": "frozen_A",
+      "object": "learned_A",
+      "verb": "does_not_beat_by_at_least",
+      "margin_symbol": "M_beat"
+    }
+  ]
+}

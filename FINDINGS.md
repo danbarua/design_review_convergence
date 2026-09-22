@@ -182,3 +182,74 @@ open natural-language parsing), replacing LLM sign-inference with regex
 matching against those templates, or (b) a mandatory human verification step
 on every extracted clause before it feeds the solver, which is what actually
 produced today's one trustworthy result.
+
+## Experiment 4, continued — redesigning the schema to remove sign arithmetic didn't help
+
+Advisory correctly flagged that v1's schema still asked the LLM to compute a
+signed threshold directly (the exact reasoning it had already gotten wrong
+twice). Redesigned to v2: extraction now only names the literal grammatical
+subject/object of a sentence and picks one of three fixed verb templates
+(`beats_by_at_least`, `does_not_beat_by_at_least`, `matches_or_beats_within`,
+margin always positive) -- pure template matching, no arithmetic, with all
+sign derivation moved into the deterministic checker as one fixed formula per
+verb. The system prompt's own worked example spells out, for the exact
+flagship sentence, the correct answer: `subject='conv', object='bank',
+verb='beats_by_at_least'`.
+
+Ran it. The model inverted subject and object on that exact sentence anyway
+(`subject='bank', object='conv', verb='does_not_beat_by_at_least'`), producing
+a `check_purpose` labeled "bank beats learned conv" that confirms the
+inversion was a genuine role-swap, not a labeling slip -- and one that
+changes the truth conditions substantially (fires under almost any outcome,
+instead of only when the competitor wins decisively). Recall also dropped
+(10 clauses extracted vs. 18-19 in the v1 runs; several real clauses missing
+entirely).
+
+**Four attempts, four different failures, on the one sentence used as the
+running example throughout this whole investigation:**
+
+| Attempt | Schema | Failure |
+|---|---|---|
+| v1, full-corpus run 1 | signed threshold | clause never extracted |
+| v1, isolated-file run | signed threshold | threshold dropped to `0` |
+| v1, full-corpus run 2 | signed threshold | sign flipped (`M_beat` instead of `-M_beat`); other clause's quote truncated |
+| v2, full-corpus run | template + literal subject/object | subject/object inverted, despite being the system prompt's own worked example |
+
+**This is the actual finding, not a bug queue.** Redesigning the schema to
+eliminate one specific reasoning step (sign arithmetic) didn't make the
+pipeline more reliable -- it relocated the same underlying judgment (which
+quantity plays which role in the comparison) into a different field, where
+the model was equally willing to get it wrong, including when handed the
+correct answer as a worked example in its own instructions. No further round
+of schema or prompt engineering was attempted after this; four independent,
+differently-shaped failures on one sentence is sufficient evidence that this
+specific translation step is not currently reliable at any schema
+granularity tried, not evidence that the fifth attempt would be the one that
+works.
+
+## Final, honest state of the tool
+
+- **The deterministic solver is real and works.** Proven sound against a
+  hand-built counterexample; mechanically confirmed A1 with a concrete
+  numeric witness once given correct data. This part of "extract as
+  structured data, check with interval arithmetic" is solid and reusable.
+- **LLM extraction of the natural-language comparison into structured form is
+  not reliable**, across two schema designs and four attempts, on the single
+  easiest case in the corpus. This is upstream of the solver and the solver
+  cannot compensate for it -- garbage in, confidently-wrong-looking-clean
+  out.
+- **The only fully trustworthy result produced in this entire session**
+  (across Experiments 1-4, roughly 15 LLM calls) is `hand-verified-A1.json`:
+  a human reading the source text, deriving the inequality by hand, and
+  writing it down directly, with the derivation shown. Every attempt to get
+  an LLM to do that translation step, at any granularity, failed differently
+  each time.
+- **Recommended next step, if this is worth pursuing further**: do not
+  iterate the LLM schema again. Either (a) write a plain regex/string-match
+  parser for this corpus's actual small closed set of sentence shapes (this
+  corpus uses maybe 6-8 distinct templates total across ~20 clauses -- fully
+  enumerable by a human in less time than this experiment took), removing
+  the LLM from structural extraction entirely and reserving it only for the
+  genuinely open-ended `check_purpose` semantic-identity judgment, or (b)
+  accept that every clause requires human sign-off before reaching the
+  solver, which is what actually worked today.
