@@ -73,9 +73,26 @@ const M_CONFIGS = [
   { Mbeat: 6, Mmatch: 6 },
 ];
 
+// Exact case analysis requires a sample point in the interior of EVERY
+// region the merged breakpoint set could carve out -- not just the
+// interior of the two fixed symbolic breakpoints (M_match, M_beat). Two
+// arbitrary thresholds (e.g. two different clauses' own resolved values)
+// can disagree in the open interval between them even when neither is
+// M_match or M_beat, or when they coincide but the comparators point in
+// opposite directions. So: collect every breakpoint (fixed set + both
+// clauses' own thresholds), sort, then insert a midpoint between every
+// adjacent pair, plus one point below the minimum and one above the
+// maximum. That is exact for a finite union of half-line boundaries,
+// regardless of how many distinct threshold values are involved.
 function sampleBreakpoints(Mbeat, Mmatch, extraThresholds) {
-  const raw = new Set([-1, 0, Mmatch / 2, Mmatch, (Mmatch + Mbeat) / 2, Mbeat, Mbeat + 1, ...extraThresholds]);
-  return [...raw].sort((a, b) => a - b);
+  const raw = [...new Set([0, Mmatch, Mbeat, ...extraThresholds])].sort((a, b) => a - b);
+  const points = [raw[0] - 1];
+  for (let i = 0; i < raw.length; i++) {
+    points.push(raw[i]);
+    if (i + 1 < raw.length) points.push((raw[i] + raw[i + 1]) / 2);
+  }
+  points.push(raw[raw.length - 1] + 1);
+  return points;
 }
 
 const norm = (s) => s.trim().toLowerCase();
@@ -117,11 +134,17 @@ for (const [purpose, group] of byPurpose) {
     for (let j = i + 1; j < oriented.length; j++) {
       const A = oriented[i], B = oriented[j];
       let mismatch = null;
+      let parseFailed = null;
       for (const { Mbeat, Mmatch } of M_CONFIGS) {
-        const extra = [];
-        try { extra.push(resolveThreshold(A.clause.threshold, Mbeat, Mmatch)); } catch {}
-        try { extra.push(resolveThreshold(B.clause.threshold, Mbeat, Mmatch)); } catch {}
-        for (const diff of sampleBreakpoints(Mbeat, Mmatch, extra)) {
+        let tA, tB;
+        try {
+          tA = resolveThreshold(A.clause.threshold, Mbeat, Mmatch);
+          tB = resolveThreshold(B.clause.threshold, Mbeat, Mmatch);
+        } catch (err) {
+          parseFailed = err.message;
+          break;
+        }
+        for (const diff of sampleBreakpoints(Mbeat, Mmatch, [tA, tB])) {
           // diff is expressed in the canonical (ref.lhs - ref.rhs) frame.
           const dA = A.sign * diff;
           const dB = B.sign * diff;
@@ -133,6 +156,11 @@ for (const [purpose, group] of byPurpose) {
           }
         }
         if (mismatch) break;
+      }
+      if (parseFailed) {
+        purposeClean = false;
+        unresolvable.push({ purpose, reason: `threshold parse error comparing ${A.clause.source} vs ${B.clause.source}: ${parseFailed}` });
+        continue;
       }
       if (mismatch) {
         purposeClean = false;

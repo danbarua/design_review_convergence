@@ -1,0 +1,31 @@
+{
+  "clauses": [
+    {
+      "source": "corpus/instruments/02_filterbank.md",
+      "quote": "Halt if the free conv beats the frozen bank by M_beat. Ties are Halt.",
+      "check_purpose": "frozen bank vs free conv margin on invariance bench",
+      "lhs": "bank",
+      "rhs": "conv",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "0"
+    },
+    {
+      "source": "corpus/instruments/02_filterbank.md",
+      "quote": "Halt: the frozen bank does not beat the learned first conv / patch+layer-1 by M_beat on the invariance bench. (Ties are Halt.)",
+      "check_purpose": "frozen bank vs free conv margin on invariance bench",
+      "lhs": "bank",
+      "rhs": "conv",
+      "operator": "halts_when_lhs_minus_rhs_lt",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "corpus/instruments/02_filterbank.md",
+      "quote": "Halt (doctrine 5): a linear map with P_max of the mix (if a mix exists) or P_max^ctrl (if no scar) on raw patches matches or beats the bank within M_match.",
+      "check_purpose": "linear readout vs bank margin on raw patches",
+      "lhs": "bank",
+      "rhs": "readout",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_match"
+    }
+  ]
+}

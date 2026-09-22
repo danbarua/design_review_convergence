@@ -1,0 +1,176 @@
+{
+  "clauses": [
+    {
+      "source": "DESIGN.md",
+      "quote": "Stop requires beating every named comparator by M_beat",
+      "check_purpose": "instrument must beat comparator by margin",
+      "lhs": "instrument",
+      "rhs": "comparator",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "DESIGN.md",
+      "quote": "Ties are Halt, not Stop — Stop requires beating every named comparator by M_beat",
+      "check_purpose": "instrument must beat comparator by margin",
+      "lhs": "instrument",
+      "rhs": "comparator",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "DESIGN.md",
+      "quote": "Readout-does-the-job is a halt: the control matches or beats the instrument (the instrument fails to beat the control by more than M_match)",
+      "check_purpose": "control vs instrument indistinguishability",
+      "lhs": "instrument",
+      "rhs": "control",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_match"
+    },
+    {
+      "source": "instruments/02_filterbank.md",
+      "quote": "Halt if the free conv beats the frozen bank by M_beat",
+      "check_purpose": "free-conv-vs-frozen-bank margin",
+      "lhs": "bank",
+      "rhs": "conv",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "-M_beat",
+      "_manually_corrected": "extraction gave threshold=M_beat (sign error, 2nd distinct wrong answer across 2 runs for this exact sentence -- 1st run gave threshold=0). Correct derivation: 'conv beats bank by M_beat' means (conv-bank)>=M_beat, i.e. (bank-conv)<=-M_beat with lhs=bank,rhs=conv. Verified by hand against DESIGN.md/02_filterbank.md source text, not re-extracted."
+    },
+    {
+      "source": "instruments/02_filterbank.md",
+      "quote": "Ties are Halt. This is also the \"failed in writing\" record for a warehouse variant as a **new** `<id>`.",
+      "check_purpose": "free-conv-vs-frozen-bank margin",
+      "lhs": "bank",
+      "rhs": "conv",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/02_filterbank.md",
+      "quote": "Halt (doctrine 5): a linear map with P_max of the mix (if a mix exists) or P_max^ctrl (if no scar) on raw patches matches or beats the bank within M_match",
+      "check_purpose": "control readout vs bank indistinguishability",
+      "lhs": "bank",
+      "rhs": "control",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_match"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "(3) must beat (1), (2) and (4) by M_beat",
+      "check_purpose": "composed module beats all controls by margin",
+      "lhs": "(3)",
+      "rhs": "(1)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "(3) must beat (1), (2) and (4) by M_beat",
+      "check_purpose": "composed module beats bank contribution control by margin",
+      "lhs": "(3)",
+      "rhs": "(2)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "(3) must beat (1), (2) and (4) by M_beat",
+      "check_purpose": "composed module beats wave contribution control by margin",
+      "lhs": "(3)",
+      "rhs": "(4)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "If (2) matches (3) within M_match, bank is not contributing — halt",
+      "check_purpose": "bank contribution to the composed module",
+      "lhs": "(3)",
+      "rhs": "(2)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_match"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "If (4) matches (3) within M_match, the wave is decoration — halt",
+      "check_purpose": "wave contribution to the composed module",
+      "lhs": "(3)",
+      "rhs": "(4)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_match"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "Halt: (3) does not beat (1), (2), and (4) by M_beat. (Any outcome that does not meet Stop is a halt.)",
+      "check_purpose": "composed module beats all controls by margin",
+      "lhs": "(3)",
+      "rhs": "(1)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "Halt: (3) does not beat (1), (2), and (4) by M_beat. (Any outcome that does not meet Stop is a halt.)",
+      "check_purpose": "composed module beats bank contribution control by margin",
+      "lhs": "(3)",
+      "rhs": "(2)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "Halt: (3) does not beat (1), (2), and (4) by M_beat. (Any outcome that does not meet Stop is a halt.)",
+      "check_purpose": "composed module beats wave contribution control by margin",
+      "lhs": "(3)",
+      "rhs": "(4)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "Halt: (2) matches (3) within M_match (bank not contributing)",
+      "check_purpose": "bank contribution to the composed module",
+      "lhs": "(3)",
+      "rhs": "(2)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_match"
+    },
+    {
+      "source": "instruments/02plus04.md",
+      "quote": "Halt: (4) matches (3) within M_match (wave not contributing)",
+      "check_purpose": "wave contribution to the composed module",
+      "lhs": "(3)",
+      "rhs": "(4)",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_match"
+    },
+    {
+      "source": "instruments/04_wave_bind.md",
+      "quote": "Halt: wave+readout does not beat the control by M_beat on ARI. (Ties are Halt. Doctrine 5: control matches or beats the instrument.)",
+      "check_purpose": "wave bind beats control by margin",
+      "lhs": "wave",
+      "rhs": "control",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/05_hippo_temporal.md",
+      "quote": "Halt: frozen-A+C does not beat the N-tap FIR by M_beat on the lag curve. (Doctrine 5: FIR matches or beats the stem.)",
+      "check_purpose": "stem vs FIR competitor margin",
+      "lhs": "stem",
+      "rhs": "FIR",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    },
+    {
+      "source": "instruments/05_hippo_temporal.md",
+      "quote": "Halt: frozen-A+C does not beat learned-A by M_beat on the lag curve. (Ties are Halt. This is the \"failed in writing\" record for a warehouse variant as a **new** `<id>`.)",
+      "check_purpose": "stem vs learned-A competitor margin",
+      "lhs": "stem",
+      "rhs": "learned-A",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat"
+    }
+  ]
+}

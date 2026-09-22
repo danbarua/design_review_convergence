@@ -118,3 +118,67 @@ any saved extraction. The same pattern generalizes here:
 
 That mechanical layer is the concrete next thing to build — not another round of LLM
 review, bounded or otherwise, at any granularity tried in this session.
+
+## Experiment 4 — replace LLM judgment with actual interval arithmetic
+
+Built `scripts/extract-margin-conditions.mjs` (LLM, structured extraction only --
+every Halt/Meter/Stop clause as `{lhs, rhs, operator, threshold, check_purpose}`,
+no equivalence judgment) and `scripts/check-margin-conditions.mjs` (plain JS,
+zero LLM calls -- exact case analysis over real-valued `d = lhs - rhs`, sampling
+every breakpoint plus a midpoint between every adjacent pair, which is exact for
+this predicate family since every threshold is one of `{0, M_beat, M_match,
+-M_beat, -M_match}`). A caught soundness bug (advisory) in the first version of
+the checker itself: it only inserted a midpoint between the two symbolic
+constants, not between arbitrary resolved threshold pairs, which would have
+silently missed disagreements between two negative-signed thresholds. Fixed and
+verified against a hand-constructed counterexample before trusting it on real
+data.
+
+**The solver is now sound.** The bottleneck moved entirely to extraction:
+
+| Attempt | What happened on the A1 flagship pair (`02_filterbank.md` Meter vs Halt clause) |
+|---|---|
+| Full-corpus extraction, run 1 | Clause B (the Halt-section sentence) never extracted at all -- checker correctly reported "clean" on incomplete data |
+| Isolated single-file extraction | Both clauses captured, but clause A's threshold resolved to `0` instead of `-M_beat` (dropped the margin magnitude entirely) |
+| Full-corpus extraction, run 2 | Clause A's sign fixed by hand after a *different* wrong answer (`threshold=M_beat`, should be `-M_beat`); clause B's quote truncated to only the trailing parenthetical, not the actual "does not beat... by M_beat" sentence |
+
+Three attempts, three different failures, on the one schema field (`threshold`)
+whose worked example in the extraction prompt already spells out the correct
+derivation for this exact sentence. Translating "X beats Y by M_beat" into a
+signed inequality is not yet a reliable LLM step, independent of how carefully
+the target schema is specified.
+
+**Final verification**: constructed the ground-truth clause pair by hand from
+the verified source text (`margin-conditions/hand-verified-A1.json`), with the
+sign derivation written out explicitly for both clauses. Ran the (now-sound)
+solver against it:
+
+```
+check_purpose: "free-conv-vs-frozen-bank margin (A1)"
+  A: Halt if the free conv beats the frozen bank by M_beat. Ties are Halt.
+  B: Halt: the frozen bank does not beat the learned first conv / patch+layer-1
+     by M_beat on the invariance bench. (Ties are Halt...)
+  witness: with M_beat=10, M_match=4, diff=-5 -> A says Halt=false, B says Halt=true
+```
+
+This is the first result in this entire session that is actually
+mechanically verified end to end -- not two LLM prose passes agreeing with
+each other (Experiment 1's R1/R2), and not an LLM asserting "NOT EQUIVALENT"
+with a self-generated counterexample (Experiment 3's refined reruns, both
+shown spurious). A1 is real, confirmed by exact arithmetic over verified text.
+
+**What this actually proves about the original ask.** "Extract as structured
+data, check with interval arithmetic" was the right instinct and the
+deterministic half of it works exactly as designed -- once. The unresolved
+part is upstream: getting a reliable structured extraction of the natural
+language into signed inequalities in the first place. That step failed three
+different ways in three tries on the single easiest, most heavily-precedented
+case in the whole corpus (the exact sentence pair two independent monolithic
+reviews had already found and quoted correctly). A production version of this
+tool needs either (a) a much narrower, more mechanical extraction grammar for
+this corpus's small closed set of phrasings ("X beats Y by S", "X does not
+beat Y by S", "X matches or beats Y within S" -- a handful of templates, not
+open natural-language parsing), replacing LLM sign-inference with regex
+matching against those templates, or (b) a mandatory human verification step
+on every extracted clause before it feeds the solver, which is what actually
+produced today's one trustworthy result.

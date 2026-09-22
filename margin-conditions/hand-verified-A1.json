@@ -1,0 +1,25 @@
+{
+  "_note": "Hand-constructed, not LLM-extracted. Three separate extraction attempts on this exact clause pair (full-corpus run 1, isolated-file run, full-corpus run 2) each failed differently: missed clause B entirely, assigned threshold=0 (dropping the margin), and truncated clause B's quote to only the trailing parenthetical. Built directly from corpus/instruments/02_filterbank.md L35 and L41, verified against the live file text.",
+  "clauses": [
+    {
+      "source": "instruments/02_filterbank.md",
+      "quote": "Halt if the free conv beats the frozen bank by M_beat. Ties are Halt.",
+      "check_purpose": "free-conv-vs-frozen-bank margin (A1)",
+      "lhs": "bank",
+      "rhs": "conv",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "-M_beat",
+      "_derivation": "'conv beats bank by M_beat' = (conv-bank)>=M_beat = (bank-conv)<=-M_beat. 'Ties are Halt' reads as: the exact margin boundary counts as the competitor having cleared it (inclusive), consistent with the >= already in 'beats by M_beat'."
+    },
+    {
+      "source": "instruments/02_filterbank.md",
+      "quote": "Halt: the frozen bank does not beat the learned first conv / patch+layer-1 by M_beat on the invariance bench. (Ties are Halt. This is also the \"failed in writing\" record for a warehouse variant as a new `<id>`.)",
+      "check_purpose": "free-conv-vs-frozen-bank margin (A1)",
+      "lhs": "bank",
+      "rhs": "conv",
+      "operator": "halts_when_lhs_minus_rhs_lte",
+      "threshold": "M_beat",
+      "_derivation": "'bank does not beat conv by M_beat' = NOT((bank-conv)>=M_beat) = (bank-conv)<M_beat, strict. 'Ties are Halt' pushes the boundary (bank-conv)==M_beat itself onto the Halt side too (bank did not clear decisively), giving <= instead of strict <: (bank-conv)<=M_beat."
+    }
+  ]
+}
